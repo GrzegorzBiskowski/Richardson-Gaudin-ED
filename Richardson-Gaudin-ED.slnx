@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="Richardson-Gaudin-ED.vcxproj" />
+  <Project Path="Richardson-Gaudin-ED.vcxproj" Id="d292e50e-27ed-49e8-bd84-48622ba6b249" />
 </Solution>
