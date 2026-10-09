@@ -3,6 +3,9 @@
 
 #include <cmath>
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 void levels_test()
@@ -52,7 +55,7 @@ void basis_test()
 	{
 		myBasis.addState(myStates[i]);
 	}
-	std::cout << "myBasis.size() = " << myBasis.size();
+	std::cout << "myBasis.size() = " << myBasis.size() << '\n';
 	std::cout << "myBasis[1].totalOccupation() = " << myBasis[1].totalOccupation() << '\n';
 	std::cout << "myBasis[2].size() = " << myBasis[2].size() << '\n';
 	std::cout << "myBasis[i][j]:" << '\n';
@@ -110,5 +113,76 @@ void countBoundedOccupations_test()
 	std::cout << "countBound... dla {1,1,1,1,1, 1,1,1} M=4: " << countBoundedOccupations(upperBounds1, 4) << '\n';
 	std::cout << "countBound... dla {1,2,2,1} M=3: " << countBoundedOccupations(upperBounds2, 3) << '\n';
 	std::cout << "countBound... dla {1,2,3,4,5} M=6: " << countBoundedOccupations(upperBounds3, 6) << '\n';
+	std::cout << '\n';
+}
+
+void blockedConfiguration_test()
+{
+	BlockedConfiguration blocked({ 0, 1, 0, 1 });
+	std::cout << "BlockedConfiguration blocked({0,1,0,1})" << '\n';
+
+	std::cout << "Seniority: "
+		<< blocked.seniority() << '\n';
+
+	for (std::size_t j = 0;
+		j < blocked.blockedElectrons().size();
+		++j)
+	{
+		std::cout << "Level " << j
+			<< ": "
+			<< blocked.blockedElectrons()[j]
+			<< " blocked electrons\n";
+	}
+	std::cout << '\n';
+}
+
+void calculateSectorDegeneracy_test()
+{
+	std::vector<Level> levels = {
+	{ 1.0, 2 }
+	};
+
+	BlockedConfiguration blocked({ 1 });
+
+	const auto d =
+		calculateSectorDegeneracy(levels, blocked);
+	std::cout << "calculateSectorDegeneracy({1.0,2}, {1}) = " << d << '\n';
+
+	std::vector<Level> levels2 = {
+	{ 1.0, 1 },
+	{ 2.0, 2 },
+	{ 3.0, 1 }
+	};
+
+	BlockedConfiguration blocked2({ 1, 1, 0 });
+	const auto b = calculateSectorDegeneracy(levels2, blocked2);
+	std::cout << "Second example = " << b << '\n' << '\n';
+}
+
+void modelGenerator_test()
+{
+	PairingModelParameters model{
+	{
+		{ 1.0, 1 },
+		{ 2.0, 2 },
+	},
+	0.1,  // pairingStrength
+	2,    // pairCount
+	false // even parity
+	};
+
+	SectorGenerator generator(model);
+	const auto sectors = generator.generate();
+	std::cout << "Number of sectors: "
+		<< sectors.size() << '\n';
+
+	for (const auto& sector : sectors) {
+		std::cout
+			<< "ID: " << sector.id
+			<< ", seniority: " << sector.seniority()
+			<< ", pairs: " << sector.pairCount
+			<< ", degeneracy: " << sector.degeneracy
+			<< '\n';
+	}
 	std::cout << '\n';
 }
