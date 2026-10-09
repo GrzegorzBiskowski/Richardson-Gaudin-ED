@@ -1,6 +1,7 @@
 #include "pairingedlib.hpp"
 #include "tests.hpp"
 
+#include <cassert>
 #include <cmath>
 #include <iostream>
 #include <sstream>
@@ -185,4 +186,87 @@ void modelGenerator_test()
 			<< '\n';
 	}
 	std::cout << '\n';
+}
+
+void pairingHamiltonian_test()
+{
+	PairingModelParameters model{
+		{
+			{ 1.0, 1 },
+			{ 2.0, 1 }
+		},
+		0.5,
+		1,
+		false
+	};
+
+	SenioritySector sector{
+		0,
+		BlockedConfiguration({ 0, 0 }),
+		1,
+		{ 1, 1 },
+		0.0,
+		1
+	};
+
+	Basis basis;
+
+	basis.addState(OccupationState({ 1, 0 }));
+	basis.addState(OccupationState({ 0, 1 }));
+
+	PairingHamiltonian hamiltonian(
+		model,
+		sector,
+		basis
+	);
+
+	DenseMatrix H = hamiltonian.buildMatrix();
+
+	assert(H.rows() == 2);
+	assert(H.cols() == 2);
+
+	assert(std::abs(H(0, 0) - 1.5) < 1e-12);
+	assert(std::abs(H(1, 1) - 3.5) < 1e-12);
+
+	assert(std::abs(H(0, 1) + 0.5) < 1e-12);
+	assert(std::abs(H(1, 0) + 0.5) < 1e-12);
+}
+
+void memoryEstimate_test()
+{
+	PairingModelParameters model;
+
+	model.levels = {
+		{ 1.0, 1 },
+		{ 2.0, 1 }
+	};
+
+	model.pairingStrength = 0.5;
+	model.pairCount = 1;
+	model.oddParity = false;
+
+	SectorGenerator generator(model);
+
+	const auto sectors = generator.generate();
+
+	const auto estimate =
+		estimateMemory(model, sectors);
+
+	assert(estimate.sectorCount == 2);
+
+	assert(estimate.totalEigenvalues == 3);
+
+	assert(estimate.largestBlockDimension == 2);
+
+	assert(estimate.matrixBytes ==
+		4 * sizeof(double));
+
+	assert(estimate.spectrumBytes ==
+		3 * sizeof(SpectrumEntry));
+
+	assert(estimate.peakBytes >=
+		estimate.matrixBytes +
+		estimate.spectrumBytes);
+
+	assert(estimate.compatibleWithLapackInt);
 }

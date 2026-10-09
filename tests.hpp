@@ -11,3 +11,5 @@ void blockedConfiguration_test();
 void calculateSectorDegeneracy_test();
 void spectrumWriter_test();
 void modelGenerator_test();
+void pairingHamiltonian_test();
+void memoryEstimate_test();
