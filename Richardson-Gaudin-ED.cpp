@@ -8,7 +8,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
-#include <openblas/cblas.h>
+#include <cblas.h>
 #include <stdexcept>
 #include <string>
 #include <vector>

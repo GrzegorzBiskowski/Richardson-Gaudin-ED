@@ -9,7 +9,7 @@
 #include <iomanip>
 #include <istream>
 #include <iostream>
-#include <openblas/cblas.h>
+#include <cblas.h>
 #include <limits>
 #include <locale>
 #include <numeric>
