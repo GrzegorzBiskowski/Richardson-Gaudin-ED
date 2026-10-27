@@ -6,7 +6,9 @@
 
 pair_count = 4
 odd_parity = false
-pairing_strength = 0.01
+pairing_strength = 0.035
+
+seniority_mode = zero
 
 # --- Energy levels ---
 # Format: level = energy pairCapacity
@@ -14,7 +16,7 @@ pairing_strength = 0.01
 
 level = -1.0 1
 level = -0.25 1
-level = -1.111111 1
+level = -0.111111 1
 level = -0.062500 1
 level = -0.040000 1
 level = -0.027778 1

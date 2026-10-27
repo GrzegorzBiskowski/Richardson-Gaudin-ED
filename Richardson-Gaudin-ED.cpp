@@ -7,12 +7,273 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
+#include <locale>
 #include <memory>
+#include <optional>
 #include <cblas.h>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+Spectrum calculateSpectrum(
+    const PairingModelParameters& model,
+    const std::vector<SenioritySector>& sectors)
+{
+    Spectrum spectrum;
+    SymmetricDiagonalizer diagonalizer;
+
+    for (const auto& sector : sectors)
+    {
+        // Generowanie bazy danego sektora.
+        Basis basis = generateSectorBasis(sector);
+
+        // Konstrukcja Hamiltonianu.
+        PairingHamiltonian hamiltonian(
+            model, sector, basis
+        );
+
+        DenseMatrix matrix = hamiltonian.buildMatrix();
+
+        // Diagonalizacja.
+        const auto eigenvalues =
+            diagonalizer.diagonalize(matrix);
+
+        // Zapis wartości własnych w pamięci.
+        for (const double eigenvalue : eigenvalues)
+        {
+            spectrum.add({
+                sector.id,
+                sector.seniority(),
+                eigenvalue + sector.blockedEnergy,
+                sector.degeneracy
+            });
+        }
+    }
+
+    spectrum.sortByEnergy();
+
+    return spectrum;
+}
+
+void scanHeatCapacityPeaks(
+    const RunConfiguration& config,
+    const std::vector<SenioritySector>& sectors)
+    {
+
+    if (!config.couplingScan.has_value())
+    {
+        throw std::invalid_argument(
+            "Coupling scan is not configured."
+        );
+    }
+
+    const auto& scan = *config.couplingScan;
+
+    const double gMin = config.model.pairingStrength;
+    const double gMax = scan.endStrength;
+
+    const auto temperatures = logarithmicGrid(
+        config.temperatureMin,
+        config.temperatureMax,
+        config.temperaturePoints
+    );
+
+    const std::string filename =
+        config.seniorityZeroOnly
+        ? "peaks_vs_g_zero.dat"
+        : "peaks_vs_g_all.dat";
+
+    std::ofstream output(filename);
+
+    if (!output)
+    {
+        throw std::runtime_error(
+            "Cannot open peak scan output file."
+        );
+    }
+
+    output.imbue(std::locale::classic());
+
+    output << std::scientific
+           << std::setprecision(
+                  std::numeric_limits<long double>::max_digits10
+              );
+
+    output << "# g peak_index T_peak C_V_peak\n";
+
+    struct PeakScanRow
+    {
+        double g;
+        std::vector<HeatCapacityPeak> peaks;
+    };
+
+    std::vector<PeakScanRow> scanRows;
+    scanRows.reserve(scan.points);
+
+    std::size_t maxPeakCount = 0;
+
+    for (std::size_t i = 0; i < scan.points; ++i)
+    {
+        const double alpha =
+            static_cast<double>(i) /
+            static_cast<double>(scan.points - 1);
+
+        const double g = (i + 1 == scan.points)
+            ? gMax
+            : gMin + alpha * (gMax - gMin);
+
+        // Kopia parametrow modelu dla nowego g.
+        PairingModelParameters model = config.model;
+        model.pairingStrength = g;
+
+        // NOWA diagonalizacja dla kazdego g.
+        Spectrum spectrum =
+            calculateSpectrum(model, sectors);
+
+        Thermodynamics thermo(
+            spectrum,
+            config.boltzmannConstant
+        );
+
+        // Obliczenie C_V na siatce temperatur.
+        std::vector<ThermodynamicPoint> samples;
+        samples.reserve(temperatures.size());
+
+        for (const double T : temperatures)
+        {
+            samples.push_back(thermo.evaluate(T));
+        }
+
+        // Nasza istniejaca funkcja znajdowania maksimow.
+        const auto peaks =
+            findHeatCapacityPeaks(thermo, samples);
+        scanRows.push_back({g, peaks});
+
+        maxPeakCount = std::max(
+            maxPeakCount,
+            peaks.size()
+        );
+
+        // Zapis wszystkich wykrytych maksimow.
+        for (std::size_t j = 0; j < peaks.size(); ++j)
+        {
+            output << g << ' '
+                   << (j + 1) << ' '
+                   << peaks[j].temperature << ' '
+                   << peaks[j].heatCapacity
+                   << '\n';
+        }
+
+        // Pusta linia oddzielajaca kolejne g.
+        output << '\n';
+
+        std::cout
+            << "[" << (i + 1) << "/"
+            << scan.points << "] "
+            << "g = " << g
+            << ", peaks = " << peaks.size()
+            << '\n';
+    }
+
+    const auto writeWideFile =
+    [&](const std::string& filename,
+        bool writeTemperatures)
+    {
+        std::ofstream file(filename);
+
+        if (!file)
+        {
+            throw std::runtime_error(
+                "Cannot open file: " + filename
+            );
+        }
+
+        file.imbue(std::locale::classic());
+
+        file << std::scientific
+             << std::setprecision(
+                 std::numeric_limits<long double>::max_digits10
+             );
+
+        // Nagłówek.
+        file << "# g";
+
+        for (std::size_t j = 0; j < maxPeakCount; ++j)
+        {
+            file << ' ';
+
+            if (writeTemperatures)
+                file << "T_peak_" << j + 1;
+            else
+                file << "CV_peak_" << j + 1;
+        }
+
+        file << '\n';
+
+        // Wiersze odpowiadające kolejnym wartościom g.
+        for (const auto& row : scanRows)
+        {
+            file << row.g;
+
+            for (std::size_t j = 0; j < maxPeakCount; ++j)
+            {
+                file << ' ';
+
+                if (j < row.peaks.size())
+                {
+                    if (writeTemperatures)
+                    {
+                        file << row.peaks[j].temperature;
+                    }
+                    else
+                    {
+                        file << row.peaks[j].heatCapacity;
+                    }
+                }
+                else
+                {
+                    file << "NaN";
+                }
+            }
+
+            file << '\n';
+        }
+
+        file.close();
+
+        if (!file)
+        {
+            throw std::runtime_error(
+                "Error writing file: " + filename
+            );
+        }
+    };
+
+    const std::string suffix =
+    config.seniorityZeroOnly ? "zero" : "all";
+
+    writeWideFile(
+        "peak_temperatures_vs_g_" + suffix + ".dat",
+        true
+    );
+
+    writeWideFile(
+        "peak_capacities_vs_g_" + suffix + ".dat",
+        false
+    );
+    output.close();
+
+    if (!output)
+    {
+        throw std::runtime_error(
+            "Error while writing peak scan results."
+        );
+    }
+
+    std::cout << "Peak scan saved to: "
+              << filename << '\n';
+}
 
 int main(int argc, char* argv[])
 {
@@ -97,10 +358,24 @@ int main(int argc, char* argv[])
 
         std::cout << "Generating seniority sectors...\n";
 
-        SectorGenerator generator(model);
+        std::vector<SenioritySector> sectors;
 
-        const std::vector<SenioritySector> sectors =
-            generator.generate();
+        if (config.seniorityZeroOnly)
+        {
+            sectors = generateSeniorityZero(model);
+
+            std::cout << "Seniority mode: zero\n";
+        }
+        else
+        {
+            SectorGenerator generator(model);
+            sectors = generator.generate();
+
+            std::cout << "Seniority mode: all\n";
+        }
+
+        std::cout << "Number of sectors: "
+                  << sectors.size() << '\n';
 
         std::cout << "Generated sectors: "
             << sectors.size() << "\n\n";
@@ -130,6 +405,12 @@ int main(int argc, char* argv[])
 
         if (answer != 'y' && answer != 'Y') {
             std::cout << "Calculation cancelled.\n";
+            return 0;
+        }
+
+        if (config.couplingScan.has_value())
+        {
+            scanHeatCapacityPeaks(config, sectors);
             return 0;
         }
 
@@ -399,8 +680,31 @@ int main(int argc, char* argv[])
         std::cout << "Calculated eigenvalues: "
             << spectrum.size() << '\n';
 
-        std::cout << "Physical state count: "
-            << spectrum.physicalStateCount() << '\n';
+        std::cout << "Physical state count: ";
+        if (config.seniorityZeroOnly)
+        {
+            const auto expected = countBoundedOccupations(
+                sectors.front().effectivePairCapacity,
+                sectors.front().pairCount
+            );
+
+            const auto actual = spectrum.physicalStateCount();
+
+            if (actual != expected)
+            {
+                throw std::runtime_error(
+                    "Incomplete seniority-zero spectrum."
+                );
+            }
+
+            std::cout << "Seniority-zero dimension: "
+                      << expected << '\n';
+        }
+        else
+        {
+            std::cout << spectrum.physicalStateCount() << '\n';
+        }
+
 
         std::cout << std::defaultfloat
             << std::setprecision(17);

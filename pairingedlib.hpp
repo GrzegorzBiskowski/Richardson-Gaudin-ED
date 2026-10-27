@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -100,6 +101,10 @@ public:
 private:
 	PairingModelParameters parameters_;
 };
+
+std::vector<SenioritySector> generateSeniorityZero(
+	const PairingModelParameters& model
+);
 
 class DenseMatrix {
 public:
@@ -366,14 +371,23 @@ std::vector<double> logarithmicGrid(
 	std::size_t points
 );
 
+struct CouplingScan
+{
+	double endStrength;
+	std::size_t points;
+};
+
 struct RunConfiguration {
 	PairingModelParameters model;
 
 	double temperatureMin;
 	double temperatureMax;
 	std::size_t temperaturePoints;
-
 	double boltzmannConstant;
+
+	bool seniorityZeroOnly = false;
+
+	std::optional<CouplingScan> couplingScan;
 };
 
 RunConfiguration readInput(std::istream& input);

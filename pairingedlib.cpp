@@ -610,6 +610,47 @@ std::vector<SenioritySector> SectorGenerator::generate() const
     return sectors;
 }
 
+std::vector<SenioritySector> generateSeniorityZero(
+    const PairingModelParameters& model)
+{
+    validate(model);
+
+    if (model.oddParity)
+    {
+        throw std::invalid_argument(
+            "Seniority zero is not available for odd particle numbers."
+        );
+    }
+
+    // W sektorze nu = 0 nie ma niesparowanych fermionow.
+    std::vector<std::uint32_t> blocked(
+        model.levels.size(), 0
+    );
+
+    // Zatem efektywne pojemnosci sa rowne Omega_j.
+    std::vector<std::uint32_t> capacities;
+    capacities.reserve(model.levels.size());
+
+    for (const auto& level : model.levels)
+    {
+        capacities.push_back(level.pairCapacity);
+    }
+
+    SenioritySector sector{
+        0,                              // sector id
+        BlockedConfiguration(blocked),  // v_j = 0
+        model.pairCount,                // M
+        std::move(capacities),          // Omega_j
+        0.0,                            // blocked energy
+        1                               // degeneracy
+    };
+
+    std::vector<SenioritySector> result;
+    result.push_back(std::move(sector));
+
+    return result;
+}
+
 std::size_t DenseMatrix::checkedElementCount(
     std::size_t rows,
     std::size_t cols
@@ -2221,6 +2262,9 @@ RunConfiguration readInput(std::istream& input)
     std::optional<double> g;
     std::optional<std::size_t> pairs;
     std::optional<bool> odd;
+    std::optional<bool> seniorityZeroOnly;
+
+    std::optional<CouplingScan> couplingScan;
 
     std::optional<double> Tmin;
     std::optional<double> Tmax;
@@ -2321,6 +2365,39 @@ RunConfiguration readInput(std::istream& input)
             );
         }
 
+        else if (key == "g_scan") {
+
+            std::istringstream tokens(value);
+
+            std::string endToken;
+            std::string pointsToken;
+            std::string extra;
+
+            if (!(tokens >> endToken >> pointsToken) ||
+                (tokens >> extra)) {
+
+                throw inputError(
+                    lineNumber,
+                    "g_scan requires exactly two values: "
+                    "endStrength points."
+                );
+                }
+
+            CouplingScan scan{
+                parseReal(endToken, lineNumber),
+                parseUInt<std::size_t>(
+                    pointsToken, lineNumber
+                )
+            };
+
+            assignOnce(
+                couplingScan,
+                scan,
+                key,
+                lineNumber
+            );
+        }
+
         else if (key == "pair_count") {
             assignOnce(
                 pairs,
@@ -2336,6 +2413,31 @@ RunConfiguration readInput(std::istream& input)
             assignOnce(
                 odd,
                 parseBool(value, lineNumber),
+                key,
+                lineNumber
+            );
+        }
+
+        else if (key == "seniority_mode") {
+
+            bool zeroOnly;
+
+            if (value == "zero") {
+                zeroOnly = true;
+            }
+            else if (value == "all") {
+                zeroOnly = false;
+            }
+            else {
+                throw inputError(
+                    lineNumber,
+                    "seniority_mode must be 'all' or 'zero'."
+                );
+            }
+
+            assignOnce(
+                seniorityZeroOnly,
+                zeroOnly,
                 key,
                 lineNumber
             );
@@ -2442,11 +2544,21 @@ RunConfiguration readInput(std::istream& input)
         *Tmin,
         *Tmax,
         *NT,
-        *kB
+        *kB,
+        seniorityZeroOnly.value_or(false),
+        couplingScan
     };
 
     // Walidacja istniejącej warstwy fizycznej.
     validate(config.model);
+
+    if (config.seniorityZeroOnly &&
+    config.model.oddParity) {
+
+        throw std::invalid_argument(
+            "Seniority zero requires even particle number."
+        );
+    }
 
     // Walidacja termodynamiki.
     if (config.temperatureMin <= 0.0 ||
@@ -2467,6 +2579,27 @@ RunConfiguration readInput(std::istream& input)
         throw std::invalid_argument(
             "boltzmann_constant must be positive."
         );
+    }
+
+    if (config.couplingScan.has_value())
+    {
+        const auto& scan = *config.couplingScan;
+
+        if (scan.points < 2)
+        {
+            throw std::invalid_argument(
+                "g_scan requires at least 2 points."
+            );
+        }
+
+        if (!std::isfinite(scan.endStrength) ||
+            scan.endStrength <= config.model.pairingStrength)
+        {
+            throw std::invalid_argument(
+                "g_scan endStrength must be finite "
+                "and greater than pairing_strength."
+            );
+        }
     }
 
     return config;
