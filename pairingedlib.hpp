@@ -347,6 +347,17 @@ private:
 	double boltzmannConstant_;
 };
 
+struct HeatCapacityPeak
+{
+	double temperature;
+	long double heatCapacity;
+};
+
+std::vector<HeatCapacityPeak> findHeatCapacityPeaks(
+	const Thermodynamics& thermo,
+	const std::vector<ThermodynamicPoint>& samples
+);
+
 
 // Ogólna funkcja numeryczna, niezależna od Thermodynamics.
 std::vector<double> logarithmicGrid(

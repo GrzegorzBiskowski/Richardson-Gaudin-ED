@@ -2471,3 +2471,87 @@ RunConfiguration readInput(std::istream& input)
 
     return config;
 }
+
+std::vector<HeatCapacityPeak> findHeatCapacityPeaks(
+    const Thermodynamics& thermo,
+    const std::vector<ThermodynamicPoint>& samples)
+{
+    std::vector<HeatCapacityPeak> peaks;
+
+    if (samples.size() < 3)
+        return peaks;
+
+    constexpr double ratio = 0.6180339887498948482;
+    constexpr std::size_t iterations = 50;
+
+    // Pojemność cieplna jako funkcja x = ln(T).
+    const auto heatCapacityAt = [&](double x) -> long double
+    {
+        return thermo.evaluate(std::exp(x)).heatCapacity;
+    };
+
+    for (std::size_t i = 1; i + 1 < samples.size(); ++i)
+    {
+        const auto& previous = samples[i - 1];
+        const auto& current  = samples[i];
+        const auto& next     = samples[i + 1];
+
+        // Wykrycie lokalnego maksimum na siatce.
+        if (!(current.heatCapacity > previous.heatCapacity &&
+              current.heatCapacity > next.heatCapacity))
+        {
+            continue;
+        }
+
+        // Przedział otaczający znalezione maksimum.
+        double left  = std::log(previous.temperature);
+        double right = std::log(next.temperature);
+
+        // Złoty podział przedziału.
+        double x1 = right - ratio * (right - left);
+        double x2 = left  + ratio * (right - left);
+
+        long double c1 = heatCapacityAt(x1);
+        long double c2 = heatCapacityAt(x2);
+
+        for (std::size_t iteration = 0;
+             iteration < iterations;
+             ++iteration)
+        {
+            if (c1 < c2)
+            {
+                left = x1;
+
+                x1 = x2;
+                c1 = c2;
+
+                x2 = left + ratio * (right - left);
+                c2 = heatCapacityAt(x2);
+            }
+            else
+            {
+                right = x2;
+
+                x2 = x1;
+                c2 = c1;
+
+                x1 = right - ratio * (right - left);
+                c1 = heatCapacityAt(x1);
+            }
+        }
+
+        // Doprecyzowane położenie maksimum.
+        const double peakTemperature =
+            std::exp(0.5 * (left + right));
+
+        const long double peakCapacity =
+            thermo.evaluate(peakTemperature).heatCapacity;
+
+        peaks.push_back({
+            peakTemperature,
+            peakCapacity
+        });
+    }
+
+    return peaks;
+}

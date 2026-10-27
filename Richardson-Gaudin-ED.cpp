@@ -472,10 +472,16 @@ int main(int argc, char* argv[])
             << "# T logZ Z Zshift U Cv S F\n";
 
         // Obliczenia.
+        std::vector<ThermodynamicPoint> thermodynamicPoints;
+
+        thermodynamicPoints.reserve(temperatures.size());
         for (double T : temperatures) {
 
             const ThermodynamicPoint result =
                 thermo.evaluate(T);
+            const auto point = thermo.evaluate(T);
+
+            thermodynamicPoints.push_back(point);
 
             thermoFile
                 << result.temperature << '\t'
@@ -487,8 +493,36 @@ int main(int argc, char* argv[])
                 << result.entropy << '\t'
                 << result.freeEnergy << '\n';
         }
+        const auto peaks =
+        findHeatCapacityPeaks(thermo, thermodynamicPoints);
+
+        std::ofstream peakFile("heat_capacity_peaks.dat");
+
+        if (!peakFile)
+        {
+            throw std::runtime_error(
+                "Cannot open heat_capacity_peaks.dat"
+            );
+        }
+
+        peakFile << std::scientific
+                 << std::setprecision(
+                        std::numeric_limits<long double>::max_digits10
+                    );
+
+        peakFile << "# T_peak C_V_peak\n";
+
+        for (const auto& peak : peaks)
+        {
+            peakFile << peak.temperature << ' '
+                     << peak.heatCapacity << '\n';
+        }
+
+        std::cout << "Detected heat capacity peaks: "
+                  << peaks.size() << '\n';
 
         thermoFile.close();
+        peakFile.close();
 
         if (!thermoFile) {
             throw std::runtime_error(
