@@ -6,8 +6,9 @@
 
 pair_count = 4
 odd_parity = false
-pairing_strength = 0.035
 
+pairing_strength = 0
+g_scan = 2.0 100
 seniority_mode = zero
 
 # --- Energy levels ---
@@ -27,6 +28,6 @@ level = -0.015625 1
 
 boltzmann_constant = 1.0
 
-temperature_min = 0.001
-temperature_max = 10.0
+temperature_min = 0.01
+temperature_max = 200
 temperature_points = 1000
